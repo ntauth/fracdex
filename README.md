@@ -105,6 +105,11 @@ The `jitterRange` parameter controls how much randomization is applied:
 - **jitterRange = 2**: Medium randomization (±2 digit steps)
 - **jitterRange = 3**: Larger randomization (±3 digit steps)
 
+**Important**: Jitter can only create variation when there's room in the lexicographic space between `a` and `b`. For example:
+- `"a1"` to `"a3"` has only one possible middle digit (`"a2"`), so jitter cannot create variation
+- `"a1"` to `"a5"` has three possible middle digits (`"a2"`, `"a3"`, `"a4"`), so jitter can create variation
+- `"a1"` to `"a9"` has seven possible middle digits, allowing maximum jitter variation
+
 ### Multiple Keys with Jitter
 
 ```go
