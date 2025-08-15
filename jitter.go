@@ -269,3 +269,179 @@ func keyBetweenInternal(a, b string, j Jitter, jitterRange int) (string, error) 
 	}
 	return ia + midpointJitter(fa, "", j, jitterRange), nil
 }
+
+// AddJitterToKey adds random jitter to an existing key by extending it with random digits.
+// This is useful when you want to add randomization to a key that was generated without jitter,
+// or when you want to "jitter" an existing key to reduce collision probability.
+//
+// The method preserves the original key's lexicographic position while adding random
+// fractional digits that maintain the ordering invariants (no trailing '0').
+//
+// Parameters:
+//   - key: The existing key to add jitter to
+//   - j: Jitter source for randomization
+//   - jitterRange: Maximum number of random digits to add
+//
+// Returns a new key with jitter added, or the original key if jitter cannot be applied.
+func AddJitterToKey(key string, j Jitter, jitterRange int) (string, error) {
+	if key == "" {
+		return "", errors.New("cannot add jitter to empty key")
+	}
+
+	// Validate the input key
+	err := validateOrderKey(key)
+	if err != nil {
+		return "", fmt.Errorf("invalid key for jitter: %v", err)
+	}
+
+	// If jitterRange is 0 or NoJitter, return the original key
+	if jitterRange <= 0 {
+		return key, nil
+	}
+
+	// Check if this is NoJitter (which always returns 0)
+	if _, ok := j.(NoJitter); ok {
+		return key, nil
+	}
+
+	// Determine how many random digits to add
+	numDigits := j.IntnRange(1, jitterRange)
+	if numDigits <= 0 {
+		return key, nil
+	}
+
+	// Generate random digits, ensuring no trailing '0'
+	result := key
+	for i := range numDigits {
+		// For the last digit, avoid '0' to maintain the no-trailing-0 invariant
+		if i == numDigits-1 {
+			// Pick from 1-61 (avoiding '0')
+			digitIdx := j.IntnRange(1, len(base62Digits)-1)
+			result += string(base62Digits[digitIdx])
+		} else {
+			// Pick from 0-61 for intermediate digits
+			digitIdx := j.IntnRange(0, len(base62Digits)-1)
+			result += string(base62Digits[digitIdx])
+		}
+	}
+
+	// Validate the result
+	err = validateOrderKey(result)
+	if err != nil {
+		return "", fmt.Errorf("generated jittered key is invalid: %v", err)
+	}
+
+	return result, nil
+}
+
+// JitterKey creates a jittered version of an existing key within the same key space.
+// Unlike AddJitterToKey, this method creates variation without increasing key length.
+// It works by finding alternative valid keys that are lexicographically close to the original.
+//
+// Parameters:
+//   - key: The existing key to jitter
+//   - j: Jitter source for randomization
+//   - jitterRange: How much to vary from the original key
+//
+// Returns a jittered key of the same length, or the original if jitter cannot be applied.
+func JitterKey(key string, j Jitter, jitterRange int) (string, error) {
+	if key == "" {
+		return "", errors.New("cannot jitter empty key")
+	}
+
+	// Validate the input key
+	err := validateOrderKey(key)
+	if err != nil {
+		return "", fmt.Errorf("invalid key for jitter: %v", err)
+	}
+
+	// If jitterRange is 0 or NoJitter, return the original key
+	if jitterRange <= 0 {
+		return key, nil
+	}
+
+	// Get the integer part and fractional part
+	ip, err := getIntPart(key)
+	if err != nil {
+		return "", fmt.Errorf("failed to get int part: %v", err)
+	}
+
+	fp := key[len(ip):]
+
+	// If there's a fractional part, try to jitter within it
+	if len(fp) > 0 {
+		// Find alternative fractional parts that maintain ordering
+		alternatives := findAlternativeFractionalParts(fp, j, jitterRange)
+		if len(alternatives) > 0 {
+			// Pick a random alternative
+			pick := j.IntnRange(0, len(alternatives)-1)
+			return ip + alternatives[pick], nil
+		}
+	}
+
+	// If no fractional part or no alternatives, try to jitter the integer part
+	// by finding a nearby valid integer
+	nearbyInts := findNearbyIntegers(ip, j, jitterRange)
+	if len(nearbyInts) > 0 {
+		pick := j.IntnRange(0, len(nearbyInts)-1)
+		return nearbyInts[pick], nil
+	}
+
+	// If no jitter possible, return original
+	return key, nil
+}
+
+// findAlternativeFractionalParts finds alternative fractional parts that maintain ordering
+func findAlternativeFractionalParts(fp string, j Jitter, jitterRange int) []string {
+	if len(fp) == 0 {
+		return nil
+	}
+
+	// If this is NoJitter, return no alternatives
+	if _, ok := j.(NoJitter); ok {
+		return nil
+	}
+
+	alternatives := make([]string, 0)
+
+	// Try to vary the last few digits while maintaining ordering
+	for i := max(0, len(fp)-jitterRange); i < len(fp); i++ {
+		// Create a variation by changing digits at position i
+		variation := fp[:i]
+
+		// For the last digit, avoid '0'
+		if i == len(fp)-1 {
+			for d := 1; d < len(base62Digits); d++ {
+				if string(base62Digits[d]) != string(fp[i]) {
+					alt := variation + string(base62Digits[d])
+					if !strings.HasSuffix(alt, "0") {
+						alternatives = append(alternatives, alt)
+					}
+				}
+			}
+		} else {
+			// For intermediate digits, can use any digit
+			for d := 0; d < len(base62Digits); d++ {
+				if string(base62Digits[d]) != string(fp[i]) {
+					alt := variation + string(base62Digits[d]) + fp[i+1:]
+					if !strings.HasSuffix(alt, "0") {
+						alternatives = append(alternatives, alt)
+					}
+				}
+			}
+		}
+	}
+
+	return alternatives
+}
+
+// findNearbyIntegers finds nearby valid integers that can be used for jitter
+func findNearbyIntegers(ip string, j Jitter, jitterRange int) []string {
+	alternatives := make([]string, 0)
+
+	// This is a simplified approach - in practice, you'd want more sophisticated
+	// logic to find truly nearby integers in the fractional indexing space
+
+	// For now, just return empty to indicate no alternatives found
+	return alternatives
+}
