@@ -187,6 +187,11 @@ func midpointJitter(a, b string, j Jitter, jitterRange int) string {
 
 // keyBetweenInternal is the internal implementation that supports jitter
 func keyBetweenInternal(a, b string, j Jitter, jitterRange int) (string, error) {
+	// If jitterRange is 0, bypass jitter and use regular KeyBetween for consistency
+	if jitterRange == 0 {
+		return KeyBetween(a, b)
+	}
+
 	if a != "" {
 		err := validateOrderKey(a)
 		if err != nil {
@@ -264,13 +269,59 @@ func keyBetweenInternal(a, b string, j Jitter, jitterRange int) (string, error) 
 	}
 	i, err := incrementInt(ia)
 	if err != nil {
-		return "", err
-	}
-	if i == "" {
 		return "", errors.New("range overflow")
 	}
 	if i < b {
 		return i, nil
 	}
 	return ia + midpointJitter(fa, "", j, jitterRange), nil
+}
+
+// KeyAfterJitter returns a key that comes after the input key by the specified distance,
+// with randomization to provide collision resistance.
+// Positive distance moves forward in lexicographic order, negative distance moves backward.
+// Distance of 0 returns the input key unchanged.
+func KeyAfterJitter(key string, distance int, j Jitter, jitterRange int) (string, error) {
+	if distance == 0 {
+		return key, nil
+	}
+
+	if key == "" {
+		return "", errors.New("cannot compute distance from empty key")
+	}
+
+	err := validateOrderKey(key)
+	if err != nil {
+		return "", err
+	}
+
+	if distance > 0 {
+		// Move forward distance steps with jitter
+		result := key
+		for i := 0; i < distance; i++ {
+			result, err = KeyBetweenJitter(result, "", j, jitterRange)
+			if err != nil {
+				return "", fmt.Errorf("failed to move forward %d steps: %w", i+1, err)
+			}
+		}
+		return result, nil
+	} else {
+		// Move backward |distance| steps with jitter
+		result := key
+		for i := 0; i < -distance; i++ {
+			result, err = KeyBetweenJitter("", result, j, jitterRange)
+			if err != nil {
+				return "", fmt.Errorf("failed to move backward %d steps: %w", i+1, err)
+			}
+		}
+		return result, nil
+	}
+}
+
+// KeyBeforeJitter returns a key that comes before the input key by the specified distance,
+// with randomization to provide collision resistance.
+// Positive distance moves backward in lexicographic order, negative distance moves forward.
+// Distance of 0 returns the input key unchanged.
+func KeyBeforeJitter(key string, distance int, j Jitter, jitterRange int) (string, error) {
+	return KeyAfterJitter(key, -distance, j, jitterRange)
 }

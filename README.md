@@ -177,11 +177,15 @@ for attempts := 0; attempts < maxRetries; attempts++ {
 - `KeyBetween(a, b string) (string, error)` - Generate key between a and b
 - `NKeysBetween(a, b string, n uint) ([]string, error)` - Generate n keys between a and b
 - `Float64Approx(key string) (float64, error)` - Convert key to approximate float64
+- `KeyAfter(key string, distance int) (string, error)` - Generate key that comes after the input key by the specified distance
+- `KeyBefore(key string, distance int) (string, error)` - Generate key that comes before the input key by the specified distance
 
 ### Jitter Functions
 
 - `KeyBetweenJitter(a, b string, j Jitter, jitterRange int) (string, error)` - Generate key with jitter
 - `NKeysBetweenJitter(a, b string, n uint, j Jitter, jitterRange int) ([]string, error)` - Generate n keys with jitter
+- `KeyAfterJitter(key string, distance int, j Jitter, jitterRange int) (string, error)` - Generate key after input by distance with jitter
+- `KeyBeforeJitter(key string, distance int, j Jitter, jitterRange int) (string, error)` - Generate key before input by distance with jitter
 
 ### Jitter Interface
 

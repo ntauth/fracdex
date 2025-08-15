@@ -423,3 +423,50 @@ func reverse(values []string) {
 		values[i], values[j] = values[j], values[i]
 	}
 }
+
+// KeyAfter returns a key that comes after the input key by the specified distance.
+// Positive distance moves forward in lexicographic order, negative distance moves backward.
+// Distance of 0 returns the input key unchanged.
+func KeyAfter(key string, distance int) (string, error) {
+	if distance == 0 {
+		return key, nil
+	}
+
+	if key == "" {
+		return "", errors.New("cannot compute distance from empty key")
+	}
+
+	err := validateOrderKey(key)
+	if err != nil {
+		return "", err
+	}
+
+	if distance > 0 {
+		// Move forward distance steps
+		result := key
+		for i := 0; i < distance; i++ {
+			result, err = KeyBetween(result, "")
+			if err != nil {
+				return "", fmt.Errorf("failed to move forward %d steps: %w", i+1, err)
+			}
+		}
+		return result, nil
+	} else {
+		// Move backward |distance| steps
+		result := key
+		for i := 0; i < -distance; i++ {
+			result, err = KeyBetween("", result)
+			if err != nil {
+				return "", fmt.Errorf("failed to move backward %d steps: %w", i+1, err)
+			}
+		}
+		return result, nil
+	}
+}
+
+// KeyBefore returns a key that comes before the input key by the specified distance.
+// Positive distance moves backward in lexicographic order, negative distance moves forward.
+// Distance of 0 returns the input key unchanged.
+func KeyBefore(key string, distance int) (string, error) {
+	return KeyAfter(key, -distance)
+}

@@ -550,3 +550,204 @@ func TestJitterPositionAnalysis(t *testing.T) {
 		t.Logf("Iteration %d: %v", i, allKeys[i])
 	}
 }
+
+func TestKeyBeforeAndAfter(t *testing.T) {
+	assert := assert.New(t)
+
+	// Test basic functionality
+	key, err := KeyAfter("a1", 1)
+	assert.Nil(err)
+	assert.Equal("a2", key)
+
+	key, err = KeyBefore("a1", 1)
+	assert.Nil(err)
+	assert.Equal("a0", key)
+
+	// Test edge cases
+	key, err = KeyAfter("a0", 1)
+	assert.Nil(err)
+	assert.Equal("a1", key)
+
+	key, err = KeyBefore("a0", 1)
+	assert.Nil(err)
+	assert.Equal("Zz", key)
+
+	key, err = KeyAfter("Zz", 1)
+	assert.Nil(err)
+	assert.Equal("a0", key)
+
+	// Test multiple steps
+	key, err = KeyAfter("a1", 5)
+	assert.Nil(err)
+	assert.Equal("a6", key)
+
+	key, err = KeyBefore("a5", 3)
+	assert.Nil(err)
+	assert.Equal("a2", key)
+
+	// Test error cases
+	_, err = KeyAfter("", 1)
+	assert.NotNil(err)
+
+	_, err = KeyBefore("", 1)
+	assert.NotNil(err)
+
+	_, err = KeyAfter("invalid", 1)
+	assert.NotNil(err)
+	assert.Contains(err.Error(), "invalid order key")
+
+	_, err = KeyBefore("invalid", 1)
+	assert.NotNil(err)
+	assert.Contains(err.Error(), "invalid order key")
+}
+
+func TestKeyBeforeAndAfterJitter(t *testing.T) {
+	assert := assert.New(t)
+
+	// Test with NoJitter (deterministic)
+	noJitter := NoJitter{}
+
+	key, err := KeyAfterJitter("a1", 1, noJitter, 0)
+	assert.Nil(err)
+	assert.Equal("a2", key)
+
+	key, err = KeyBeforeJitter("a1", 1, noJitter, 0)
+	assert.Nil(err)
+	assert.Equal("a0", key)
+
+	// Test with RandJitter (should produce variation)
+	r := rand.New(rand.NewSource(42))
+	randJitter := RandJitter{R: r}
+
+	// Test that jittered versions produce different results
+	afterResults := make(map[string]bool)
+	beforeResults := make(map[string]bool)
+
+	for i := 0; i < 10; i++ {
+		r := rand.New(rand.NewSource(int64(i)))
+		jitter := RandJitter{R: r}
+
+		key, err := KeyAfterJitter("a1", 1, jitter, 2)
+		assert.Nil(err)
+		afterResults[key] = true
+
+		key, err = KeyBeforeJitter("a3", 1, jitter, 2)
+		assert.Nil(err)
+		beforeResults[key] = true
+	}
+
+	// With jitter, we should get some variation
+	if len(afterResults) > 1 {
+		t.Logf("KeyAfterJitter produced %d unique results: %v", len(afterResults), afterResults)
+	}
+
+	if len(beforeResults) > 1 {
+		t.Logf("KeyBeforeJitter produced %d unique results: %v", len(beforeResults), beforeResults)
+	}
+
+	// Test error cases
+	_, err = KeyAfterJitter("", 1, randJitter, 2)
+	assert.NotNil(err)
+
+	_, err = KeyBeforeJitter("", 1, randJitter, 2)
+	assert.NotNil(err)
+
+	_, err = KeyAfterJitter("invalid", 1, randJitter, 2)
+	assert.NotNil(err)
+	assert.Contains(err.Error(), "invalid order key")
+
+	_, err = KeyBeforeJitter("invalid", 1, randJitter, 2)
+	assert.NotNil(err)
+	assert.Contains(err.Error(), "invalid order key")
+}
+
+func TestKeyBeforeAndAfterConsistency(t *testing.T) {
+	// Test that jittered and non-jittered versions produce identical results when using NoJitter
+	noJitter := NoJitter{}
+
+	testCases := []struct {
+		key      string
+		distance int
+		desc     string
+	}{
+		{"a1", 1, "after a1 by 1"},
+		{"a5", 1, "before a5 by 1"},
+		{"a0", 1, "after a0 by 1"},
+		{"Zz", 1, "after Zz by 1"},
+		{"a1", 5, "after a1 by 5"},
+		{"aA", 3, "before aA by 3"}, // aA is valid (a10 in decimal)
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			// Test KeyAfter consistency
+			key1, err1 := KeyAfter(tc.key, tc.distance)
+			key2, err2 := KeyAfterJitter(tc.key, tc.distance, noJitter, 0)
+
+			assert.Nil(t, err1)
+			assert.Nil(t, err2)
+			assert.Equal(t, key1, key2, "KeyAfter and KeyAfterJitter with NoJitter should produce identical results")
+
+			// Test KeyBefore consistency
+			key1, err1 = KeyBefore(tc.key, tc.distance)
+			key2, err2 = KeyBeforeJitter(tc.key, tc.distance, noJitter, 0)
+
+			assert.Nil(t, err1)
+			assert.Nil(t, err2)
+			assert.Equal(t, key1, key2, "KeyBefore and KeyBeforeJitter with NoJitter should produce identical results")
+		})
+	}
+}
+
+func TestKeyBeforeAndAfterEdgeCases(t *testing.T) {
+	assert := assert.New(t)
+
+	// Test boundary conditions
+	key, err := KeyBefore("a0", 1)
+	assert.Nil(err)
+	assert.Equal("Zz", key)
+
+	key, err = KeyAfter("Zz", 1)
+	assert.Nil(err)
+	assert.Equal("a0", key)
+
+	// Test that we can chain operations
+	key, err = KeyAfter("a1", 1)
+	assert.Nil(err)
+	assert.Equal("a2", key)
+
+	key, err = KeyAfter(key, 1) // a2 -> a3
+	assert.Nil(err)
+	assert.Equal("a3", key)
+
+	key, err = KeyBefore(key, 1) // a3 -> a2
+	assert.Nil(err)
+	assert.Equal("a2", key)
+
+	// Test with fractional keys
+	key, err = KeyAfter("a1V", 1)
+	assert.Nil(err)
+	assert.True(key > "a1V")
+
+	key, err = KeyBefore("a1V", 1)
+	assert.Nil(err)
+	assert.True(key < "a1V")
+
+	// Test large distances
+	key, err = KeyAfter("a0", 100)
+	assert.Nil(err)
+	assert.True(key > "a0")
+
+	key, err = KeyBefore("a1G", 50) // a1G is valid (a100 in decimal)
+	assert.Nil(err)
+	assert.True(key < "a1G")
+
+	// Test negative distances (should work the same as positive)
+	key, err = KeyAfter("a5", -3)
+	assert.Nil(err)
+	assert.Equal("a2", key)
+
+	key, err = KeyBefore("a2", -3)
+	assert.Nil(err)
+	assert.Equal("a5", key)
+}
