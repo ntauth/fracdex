@@ -1,8 +1,10 @@
 package fracdex
 
 import (
+	crypto_rand "crypto/rand"
 	"errors"
 	"fmt"
+	"math/big"
 	"math/rand"
 	"strings"
 )
@@ -18,7 +20,30 @@ type NoJitter struct{}
 
 func (NoJitter) IntnRange(min, max int) int { return 0 }
 
-// RandJitter is a helper backed by *rand.Rand:
+// CryptoRandJitter implements Jitter using crypto/rand, which is thread-safe.
+type CryptoRandJitter struct{}
+
+func (CryptoRandJitter) IntnRange(min, max int) int {
+	if max < min {
+		return min
+	}
+	if max == min {
+		return min
+	}
+
+	// Calculate the range size
+	rangeSize := max - min + 1
+
+	// Generate a random number in [0, rangeSize) using crypto/rand
+	randomBig, err := crypto_rand.Int(crypto_rand.Reader, big.NewInt(int64(rangeSize)))
+	if err != nil {
+		panic(err)
+	}
+
+	return min + int(randomBig.Int64())
+}
+
+// RandJitter is a helper backed by *rand.Rand, which is not thread-safe.
 type RandJitter struct{ R *rand.Rand }
 
 func (j RandJitter) IntnRange(min, max int) int {
